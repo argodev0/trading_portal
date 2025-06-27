@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Portal - Home</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .welcome-message {
+            text-align: center;
+            padding: 20px;
+            background-color: #e8f5e8;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Trading Portal</h1>
+        <div class="welcome-message">
+            <h2>Welcome to the Trading Portal!</h2>
+            <p>Your Django application is running successfully.</p>
+            <p>This is the Users app homepage.</p>
+        </div>
+        <nav>
+            <ul>
+                <li><a href="{% url 'users:index' %}">Users Index</a></li>
+                <li><a href="{% url 'admin:index' %}">Admin Panel</a></li>
+            </ul>
+        </nav>
+    </div>
+</body>
+</html>
