@@ -111,14 +111,8 @@ class ApiService {
 
   // Exchange accounts
   async getExchangeAccounts(): Promise<ExchangeAccount[]> {
-    try {
-      const response = await apiClient.get('/api/accounts/keys/');
-      return this.transformExchangeData(response.data);
-    } catch (error) {
-      console.error('Failed to fetch exchange accounts:', error);
-      // Return mock data for development
-      return this.getMockExchangeAccounts();
-    }
+    const response = await apiClient.get('/api/accounts/keys/');
+    return this.transformExchangeData(response.data);
   }
 
   async syncExchangeAccount(accountId: number): Promise<ExchangeAccount> {
@@ -128,36 +122,24 @@ class ApiService {
 
   // Portfolio data
   async getPortfolioSummary(): Promise<PortfolioSummary> {
-    try {
-      const accounts = await this.getExchangeAccounts();
-      return this.calculatePortfolioSummary(accounts);
-    } catch (error) {
-      console.error('Failed to fetch portfolio summary:', error);
-      return this.getMockPortfolioSummary();
-    }
+    const accounts = await this.getExchangeAccounts();
+    return this.calculatePortfolioSummary(accounts);
   }
 
   // Chart data
   async getChartData(symbol: string, interval: string = '1h'): Promise<ChartData> {
-    try {
-      // This would typically call a chart data endpoint
-      // For now, we'll use the TradingView widget approach
-      return this.getMockChartData(symbol, interval);
-    } catch (error) {
-      console.error('Failed to fetch chart data:', error);
-      return this.getMockChartData(symbol, interval);
-    }
+    // Chart data is handled by TradingView widgets
+    // This endpoint would be used for custom chart implementations
+    const response = await apiClient.get('/api/market/chart/', {
+      params: { symbol, interval }
+    });
+    return response.data;
   }
 
   // Market data
   async getMarketData(): Promise<TradingPair[]> {
-    try {
-      const response = await apiClient.get('/api/market/tickers/');
-      return response.data;
-    } catch (error) {
-      console.error('Failed to fetch market data:', error);
-      return this.getMockMarketData();
-    }
+    const response = await apiClient.get('/api/market/tickers/');
+    return response.data;
   }
 
   // Transform exchange data from backend format
@@ -179,162 +161,18 @@ class ApiService {
     const totalValue = accounts.reduce((sum, account) => sum + account.total_value_usd, 0);
     const assetCount = accounts.reduce((count, account) => count + account.balances.length, 0);
     
+    // Get BTC price from the first account's BTC balance or use market data
+    const btcPrice = 45000; // This should come from real market data API
+    
     return {
       total_value_usd: totalValue,
-      total_value_btc: totalValue / 45000, // Mock BTC price
-      day_change_usd: totalValue * 0.025, // Mock 2.5% daily change
+      total_value_btc: totalValue / btcPrice,
+      day_change_usd: totalValue * 0.025, // These should come from historical data
       day_change_percent: 2.5,
-      week_change_usd: totalValue * -0.015, // Mock -1.5% weekly change
+      week_change_usd: totalValue * -0.015,
       week_change_percent: -1.5,
       asset_count: assetCount,
     };
-  }
-
-  // Mock data generators for development
-  private getMockExchangeAccounts(): ExchangeAccount[] {
-    return [
-      {
-        id: 1,
-        name: 'Binance - Funding',
-        exchange: 'Binance',
-        account_type: 'funding',
-        status: 'active',
-        total_value_usd: 178.62,
-        balances: [
-          {
-            asset: 'BTC',
-            free: 0.00166,
-            locked: 0,
-            total: 0.00166,
-            value_usd: 178.62,
-            value_btc: 0.00166,
-          }
-        ],
-        last_updated: new Date().toISOString(),
-      },
-      {
-        id: 2,
-        name: 'Binance - Futures',
-        exchange: 'Binance',
-        account_type: 'futures',
-        status: 'active',
-        total_value_usd: 0.00,
-        balances: [],
-        last_updated: new Date().toISOString(),
-      },
-      {
-        id: 3,
-        name: 'Binance - Spot',
-        exchange: 'Binance',
-        account_type: 'spot',
-        status: 'active',
-        total_value_usd: 0.00,
-        balances: [
-          {
-            asset: 'LDBNB',
-            free: 0.00000,
-            locked: 0,
-            total: 0.00000,
-            value_usd: 0.00,
-            value_btc: 0,
-          }
-        ],
-        last_updated: new Date().toISOString(),
-      },
-      {
-        id: 4,
-        name: 'KuCoin - Funding',
-        exchange: 'KuCoin',
-        account_type: 'funding',
-        status: 'active',
-        total_value_usd: 0.00,
-        balances: [],
-        last_updated: new Date().toISOString(),
-      },
-      {
-        id: 5,
-        name: 'KuCoin - Spot',
-        exchange: 'KuCoin',
-        account_type: 'spot',
-        status: 'active',
-        total_value_usd: 178.38,
-        balances: [
-          {
-            asset: 'BTC',
-            free: 0.00166,
-            locked: 0,
-            total: 0.00166,
-            value_usd: 178.38,
-            value_btc: 0.00166,
-          },
-          {
-            asset: 'USDT',
-            free: 0.00017,
-            locked: 0,
-            total: 0.00017,
-            value_usd: 0.00,
-            value_btc: 0,
-          }
-        ],
-        last_updated: new Date().toISOString(),
-      }
-    ];
-  }
-
-  private getMockPortfolioSummary(): PortfolioSummary {
-    return {
-      total_value_usd: 1256.89,
-      total_value_btc: 0.02793,
-      day_change_usd: 45.67,
-      day_change_percent: 3.77,
-      week_change_usd: -23.45,
-      week_change_percent: -1.83,
-      asset_count: 4,
-    };
-  }
-
-  private getMockChartData(symbol: string, interval: string): ChartData {
-    const data: ChartData['data'] = [];
-    const now = Date.now();
-    const oneHour = 60 * 60 * 1000;
-    let basePrice = 45000; // Starting BTC price
-
-    for (let i = 100; i >= 0; i--) {
-      const time = Math.floor((now - i * oneHour) / 1000);
-      const volatility = 0.02;
-      const randomChange = (Math.random() - 0.5) * volatility;
-      
-      const open = basePrice;
-      const close = open * (1 + randomChange);
-      const high = Math.max(open, close) * (1 + Math.random() * 0.01);
-      const low = Math.min(open, close) * (1 - Math.random() * 0.01);
-      
-      data.push({
-        time,
-        open: parseFloat(open.toFixed(2)),
-        high: parseFloat(high.toFixed(2)),
-        low: parseFloat(low.toFixed(2)),
-        close: parseFloat(close.toFixed(2)),
-        volume: Math.floor(Math.random() * 1000) + 100,
-      });
-
-      basePrice = close;
-    }
-
-    return {
-      symbol,
-      interval,
-      data,
-    };
-  }
-
-  private getMockMarketData(): TradingPair[] {
-    return [
-      { symbol: 'BTCUSDT', base_asset: 'BTC', quote_asset: 'USDT', price: 45234.56, change_24h: 2.45, volume_24h: 1234567890 },
-      { symbol: 'ETHUSDT', base_asset: 'ETH', quote_asset: 'USDT', price: 2345.67, change_24h: -1.23, volume_24h: 987654321 },
-      { symbol: 'BNBUSDT', base_asset: 'BNB', quote_asset: 'USDT', price: 234.56, change_24h: 0.89, volume_24h: 456789123 },
-      { symbol: 'ADAUSDT', base_asset: 'ADA', quote_asset: 'USDT', price: 0.4567, change_24h: 4.56, volume_24h: 123456789 },
-    ];
   }
 }
 

@@ -5,8 +5,7 @@ import {
   Typography,
   Button,
   CircularProgress,
-  Alert,
-  RefreshIcon
+  Alert
 } from '@mui/material';
 import { Refresh as RefreshIconMUI } from '@mui/icons-material';
 import BalanceCard from '../components/BalanceCard';
@@ -188,19 +187,7 @@ const BalanceDashboard: React.FC<BalanceDashboardProps> = ({
           </Grid>
         ))}
 
-        {/* Fallback: if data doesn't have exchange grouping, show a single card */}
-        {Object.keys(groupedBalances).length === 0 && data && (
-          <Grid item xs={12} sm={6} md={4}>
-            <BalanceCard
-              exchangeName="Trading Account"
-              walletType="Portfolio"
-              balanceData={data.map(item => ({
-                asset: item.asset,
-                value: item.value
-              }))}
-            />
-          </Grid>
-        )}
+
       </Grid>
 
       {/* Summary info */}
