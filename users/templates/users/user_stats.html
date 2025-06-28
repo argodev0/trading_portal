@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Portal - User Statistics</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #007bff;
+        }
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            color: #666;
+            margin-top: 5px;
+        }
+        .free-tier { border-left-color: #28a745; }
+        .premium-tier { border-left-color: #ffc107; }
+        .free-tier .stat-number { color: #28a745; }
+        .premium-tier .stat-number { color: #ffc107; }
+        nav {
+            margin-top: 30px;
+            text-align: center;
+        }
+        nav a {
+            margin: 0 10px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        nav a:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Trading Portal - User Statistics</h1>
+        <p>Custom User Model with UUID Primary Keys and Account Tiers</p>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number">{{ total_users }}</div>
+                <div class="stat-label">Total Users</div>
+            </div>
+            
+            <div class="stat-card free-tier">
+                <div class="stat-number">{{ free_users }}</div>
+                <div class="stat-label">Free Tier Users</div>
+            </div>
+            
+            <div class="stat-card premium-tier">
+                <div class="stat-number">{{ premium_users }}</div>
+                <div class="stat-label">Premium Tier Users</div>
+            </div>
+        </div>
+        
+        <div style="background-color: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h3>Custom User Model Features:</h3>
+            <ul>
+                <li>✅ UUID Primary Key instead of integer</li>
+                <li>✅ Account Tier field (Free/Premium)</li>
+                <li>✅ Inherits from AbstractUser</li>
+                <li>✅ Custom admin interface</li>
+                <li>✅ Default tier is 'Free'</li>
+            </ul>
+        </div>
+        
+        <nav>
+            <a href="{% url 'users:index' %}">Home</a>
+            <a href="{% url 'users:home' %}">Homepage</a>
+            <a href="{% url 'admin:index' %}">Admin Panel</a>
+        </nav>
+    </div>
+</body>
+</html>
