@@ -7,7 +7,37 @@ from django.http import Http404
 
 from .models import Exchange, UserAPIKey
 from .serializers import UserAPIKeyListSerializer, UserAPIKeyCreateSerializer
-from .services import APIKeyManager
+from .services import APIKeyManager, ExchangeBalanceService
+
+
+class UserBalancesView(APIView):
+    """
+    API endpoint for fetching user's balances from all configured exchanges.
+    
+    GET /api/accounts/balances/
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """
+        Fetch balances from all user's configured exchanges using ccxt.
+        """
+        try:
+            balance_service = ExchangeBalanceService()
+            balances = balance_service.fetch_user_balances(request.user)
+            
+            return Response({
+                'success': True,
+                'count': len(balances),
+                'data': balances
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': 'Failed to fetch balances',
+                'detail': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class UserAPIKeysView(APIView):

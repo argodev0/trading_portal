@@ -34,6 +34,7 @@ import DashboardView from './views/DashboardView';
 import PortfolioView from './views/PortfolioView';
 import TradingChartsView from './views/TradingChartsView';
 import CryptoHeatmapView from './views/CryptoHeatmapView';
+import LoginPage from './views/LoginPage';
 
 // Create dark theme matching the attached image
 const darkTheme = createTheme({
@@ -177,6 +178,7 @@ const navigationItems = [
   { text: 'Trade History', icon: <TradeHistoryIcon />, id: 'history' },
   { text: 'Strategy Generator', icon: <StrategyGeneratorIcon />, id: 'strategy' },
   { text: 'Settings', icon: <SettingsIcon />, id: 'settings' },
+  { text: 'Login', icon: <SettingsIcon />, id: 'login' }, // Add login nav
 ];
 
 const App: React.FC = () => {
@@ -206,6 +208,8 @@ const App: React.FC = () => {
         return <TradingChartsView />;
       case 'heatmap':
         return <CryptoHeatmapView />;
+      case 'login':
+        return <LoginPage />;
       default:
         return <DashboardView />;
     }

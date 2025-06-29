@@ -5,201 +5,55 @@ import os
 import json
 import base64
 import time
-from typing import Dict, Tuple, Any
+import ccxt
+from typing import Dict, Tuple, Any, List
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+import logging
 
-
-class KeyEncryptor:
-    """
-    Encryption service for API keys using AES-GCM mode
-    """
-    
-    def __init__(self):
-        """Initialize the encryptor with master key from environment"""
-        self.master_key = self._get_master_key()
-    
-    def _get_master_key(self) -> bytes:
-        """
-        Get the master encryption key from environment variable
-        
-        Returns:
-            bytes: 32-byte master encryption key
-            
-        Raises:
-            ImproperlyConfigured: If master key is not set or invalid
-        """
-        master_key_b64 = os.environ.get('MASTER_ENCRYPTION_KEY')
-        
-        if not master_key_b64:
-            raise ImproperlyConfigured(
-                "MASTER_ENCRYPTION_KEY environment variable is not set. "
-                "Generate one with: python -c \"import base64; from Crypto.Random import get_random_bytes; "
-                "print(base64.b64encode(get_random_bytes(32)).decode())\""
-            )
-        
-        try:
-            master_key = base64.b64decode(master_key_b64)
-            if len(master_key) != 32:
-                raise ValueError("Master key must be 32 bytes")
-            return master_key
-        except Exception as e:
-            raise ImproperlyConfigured(
-                f"Invalid MASTER_ENCRYPTION_KEY: {e}. "
-                "Key must be a base64-encoded 32-byte value."
-            )
-    
-    def encrypt(self, api_key: str, secret_key: str) -> Tuple[bytes, bytes]:
-        """
-        Encrypt API credentials using AES-GCM
-        
-        Args:
-            api_key (str): The API key (public part)
-            secret_key (str): The secret key (private part)
-            
-        Returns:
-            Tuple[bytes, bytes]: (encrypted_blob, nonce)
-                - encrypted_blob: Contains encrypted credentials + auth tag
-                - nonce: Random nonce used for encryption
-        """
-        # Prepare credentials data
-        credentials = {
-            'api_key': api_key,
-            'secret_key': secret_key,
-            'timestamp': str(time.time())  # Add timestamp for additional verification
-        }
-        
-        # Convert to JSON bytes
-        credentials_json = json.dumps(credentials, sort_keys=True)
-        credentials_bytes = credentials_json.encode('utf-8')
-        
-        # Generate random nonce (12 bytes is recommended for GCM)
-        nonce = get_random_bytes(12)
-        
-        # Create cipher with master key and nonce
-        cipher = AES.new(self.master_key, AES.MODE_GCM, nonce=nonce)
-        
-        # Encrypt and get authentication tag
-        ciphertext, auth_tag = cipher.encrypt_and_digest(credentials_bytes)
-        
-        # Combine ciphertext and auth tag
-        encrypted_blob = ciphertext + auth_tag
-        
-        return encrypted_blob, nonce
-    
-    def decrypt(self, encrypted_blob: bytes, nonce: bytes) -> Dict[str, str]:
-        """
-        Decrypt API credentials using AES-GCM
-        
-        Args:
-            encrypted_blob (bytes): Encrypted credentials + auth tag
-            nonce (bytes): Nonce used during encryption
-            
-        Returns:
-            Dict[str, str]: Decrypted credentials containing 'api_key' and 'secret_key'
-            
-        Raises:
-            ValueError: If decryption fails (wrong key, corrupted data, etc.)
-        """
-        try:
-            # Split encrypted blob into ciphertext and auth tag
-            # Auth tag is always 16 bytes for GCM
-            if len(encrypted_blob) < 16:
-                raise ValueError("Encrypted blob is too short")
-            
-            ciphertext = encrypted_blob[:-16]
-            auth_tag = encrypted_blob[-16:]
-            
-            # Create cipher with master key and nonce
-            cipher = AES.new(self.master_key, AES.MODE_GCM, nonce=nonce)
-            
-            # Decrypt and verify authentication tag
-            decrypted_bytes = cipher.decrypt_and_verify(ciphertext, auth_tag)
-            
-            # Parse JSON
-            credentials_json = decrypted_bytes.decode('utf-8')
-            credentials = json.loads(credentials_json)
-            
-            # Validate required fields
-            if 'api_key' not in credentials or 'secret_key' not in credentials:
-                raise ValueError("Invalid credentials format")
-            
-            return {
-                'api_key': credentials['api_key'],
-                'secret_key': credentials['secret_key']
-            }
-            
-        except Exception as e:
-            raise ValueError(f"Decryption failed: {e}")
-    
-    @staticmethod
-    def generate_master_key() -> str:
-        """
-        Generate a new base64-encoded master key
-        
-        Returns:
-            str: Base64-encoded 32-byte master key
-        """
-        key_bytes = get_random_bytes(32)
-        return base64.b64encode(key_bytes).decode('utf-8')
-
+logger = logging.getLogger(__name__)
 
 class APIKeyManager:
     """
-    High-level manager for API key operations
+    Manage API keys for different exchanges
     """
-    
-    def __init__(self):
-        self.encryptor = KeyEncryptor()
-    
-    def store_api_credentials(self, user, exchange, name: str, api_key: str, secret_key: str) -> 'UserAPIKey':
+
+    def __init__(self, exchange_id: str, api_key: str, secret: str, password: str = None):
+        self.exchange_id = exchange_id
+        self.api_key = api_key
+        self.secret = secret
+        self.password = password
+        self.exchange = self._initialize_exchange()
+
+    def _initialize_exchange(self):
         """
-        Store encrypted API credentials for a user
-        
-        Args:
-            user: User instance
-            exchange: Exchange instance
-            name (str): User-friendly name for the API key
-            api_key (str): Public API key
-            secret_key (str): Secret API key
-            
-        Returns:
-            UserAPIKey: Created UserAPIKey instance
+        Initialize the exchange class from ccxt
         """
-        from .models import UserAPIKey
-        
-        # Encrypt the credentials
-        encrypted_blob, nonce = self.encryptor.encrypt(api_key, secret_key)
-        
-        # Store in database
-        user_api_key = UserAPIKey.objects.create(
-            user=user,
-            exchange=exchange,
-            name=name,
-            api_key_public_part=api_key,  # Store public part for reference
-            encrypted_credentials=encrypted_blob,
-            nonce=nonce
-        )
-        
-        return user_api_key
-    
-    def retrieve_api_credentials(self, user_api_key: 'UserAPIKey') -> Dict[str, str]:
+        try:
+            exchange_class = getattr(ccxt, self.exchange_id)
+            return exchange_class({
+                'apiKey': self.api_key,
+                'secret': self.secret,
+                'password': self.password,
+            })
+        except Exception as e:
+            logger.error(f"Error initializing exchange {self.exchange_id}: {str(e)}")
+            raise
+
+    def fetch_balance(self):
         """
-        Retrieve and decrypt API credentials
-        
-        Args:
-            user_api_key: UserAPIKey instance
-            
-        Returns:
-            Dict[str, str]: Decrypted credentials
+        Fetch balance from the exchange
         """
-        return self.encryptor.decrypt(
-            user_api_key.encrypted_credentials,
-            user_api_key.nonce
-        )
-    
+        try:
+            balance = self.exchange.fetch_balance()
+            logger.info(f"Balance for {self.exchange_id}: {balance}")
+            return balance
+        except Exception as e:
+            logger.error(f"Error fetching balance from {self.exchange_id}: {str(e)}")
+            raise
+
     def update_api_credentials(self, user_api_key: 'UserAPIKey', api_key: str, secret_key: str) -> 'UserAPIKey':
         """
         Update existing API credentials with new encrypted values
@@ -222,3 +76,93 @@ class APIKeyManager:
         user_api_key.save()
         
         return user_api_key
+
+    def get_exchange_client(self, user_api_key: 'UserAPIKey'):
+        """
+        Create a ccxt exchange client using stored API credentials
+        
+        Args:
+            user_api_key: UserAPIKey instance
+            
+        Returns:
+            ccxt.Exchange: Configured exchange client
+        """
+        # Get decrypted credentials
+        credentials = self.retrieve_api_credentials(user_api_key)
+        
+        # Map exchange names to ccxt classes
+        exchange_map = {
+            'binance': ccxt.binance,
+            'coinbase': ccxt.coinbase,
+            'kraken': ccxt.kraken,
+            'okx': ccxt.okx,
+            'bybit': ccxt.bybit,
+            'kucoin': ccxt.kucoin,
+            # Add more exchanges as needed
+        }
+        
+        exchange_name = user_api_key.exchange.name.lower()
+        if exchange_name not in exchange_map:
+            raise ValueError(f"Exchange {exchange_name} not supported")
+        
+        # Create exchange client
+        exchange_class = exchange_map[exchange_name]
+        client = exchange_class({
+            'apiKey': credentials['api_key'],
+            'secret': credentials['secret_key'],
+            'sandbox': False,  # Set to True for testing
+            'enableRateLimit': True,
+        })
+        
+        return client
+
+    def fetch_user_balances(self, user) -> List[Dict[str, Any]]:
+        """
+        Fetch balances from all exchanges for a user
+        
+        Args:
+            user: User instance
+            
+        Returns:
+            List[Dict]: List of balance data from all exchanges
+        """
+        from .models import UserAPIKey
+        
+        all_balances = []
+        user_api_keys = UserAPIKey.objects.filter(user=user, is_active=True)
+        
+        for user_api_key in user_api_keys:
+            try:
+                # Get exchange client
+                client = self.get_exchange_client(user_api_key)
+                
+                # Fetch balance
+                balance = client.fetch_balance()
+                
+                # Format balance data
+                for currency, amounts in balance.items():
+                    if currency == 'info':  # Skip raw API response
+                        continue
+                    
+                    free = amounts.get('free', 0)
+                    used = amounts.get('used', 0)
+                    total = amounts.get('total', 0)
+                    
+                    if total > 0:  # Only include currencies with balance
+                        all_balances.append({
+                            'exchange': user_api_key.exchange.name,
+                            'exchangeName': user_api_key.exchange.name,
+                            'walletType': 'Spot',  # Default to spot
+                            'asset': currency,
+                            'free': float(free) if free else 0.0,
+                            'used': float(used) if used else 0.0,
+                            'total': float(total) if total else 0.0,
+                            'value': float(total) if total else 0.0,  # For compatibility
+                        })
+                        
+            except Exception as e:
+                logger.error(f"Error fetching balance for {user_api_key.exchange.name}: {e}")
+                # Continue with other exchanges even if one fails
+                continue
+        
+        return all_balances
