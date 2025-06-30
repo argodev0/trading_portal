@@ -1,0 +1,19 @@
+{
+    "recommendations": [
+        "ms-python.python",
+        "ms-python.flake8",
+        "ms-python.pylint",
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-typescript-next",
+        "formulahendry.auto-rename-tag",
+        "ms-vscode.vscode-json",
+        "redhat.vscode-yaml"
+    ],
+    "unwantedRecommendations": [
+        "ms-dotnettools.csharp",
+        "ms-dotnettools.vscode-dotnet-runtime",
+        "ms-dotnettools.vscode-dotnet-pack",
+        "ms-vscode.vscode-dotnet-sdk"
+    ]
+}

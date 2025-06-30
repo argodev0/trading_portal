@@ -111,12 +111,12 @@ class ApiService {
 
   // Exchange accounts
   async getExchangeAccounts(): Promise<ExchangeAccount[]> {
-    const response = await apiClient.get('/api/accounts/keys/');
+    const response = await apiClient.get('/api/exchanges/keys/');
     return this.transformExchangeData(response.data);
   }
 
   async syncExchangeAccount(accountId: number): Promise<ExchangeAccount> {
-    const response = await apiClient.post(`/api/accounts/keys/${accountId}/sync/`);
+    const response = await apiClient.post(`/api/exchanges/keys/${accountId}/sync/`);
     return response.data;
   }
 

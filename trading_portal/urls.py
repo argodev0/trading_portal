@@ -18,12 +18,15 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from .health_views import health_check
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('django/', include('users.urls')),  # Changed from '' to 'django/'
+    path('api/health/', health_check, name='health-check'),
     path('api/auth/', include('users.api_urls')),
     path('api/accounts/', include('exchanges.api_urls')),
+    path('api/exchanges/', include('exchanges.api_urls')),  # Add explicit exchanges route
     path('api/strategies/', include('strategies.api_urls')),
     path('api/bots/', include('bots.api_urls')),
 ]

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -14,53 +14,151 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  LinearProgress,
   CircularProgress,
   Alert,
   Skeleton,
 } from '@mui/material';
 import {
-  TrendingUp,
-  TrendingDown,
-  MoreVert,
   Add,
   Refresh,
   Sync,
 } from '@mui/icons-material';
-import { useExchangeAccounts, useConnectionStatus, usePortfolioSummary } from '../hooks/useApiData';
+import { useConnectionStatus } from '../hooks/useApiData';
+import useFetchBalances from '../hooks/useFetchBalances';
+import ConnectionStatusComponent from '../components/ConnectionStatusComponent';
+import { connectionStatusService, ConnectionStatusState } from '../services/connectionStatusService';
+import { useBalanceWebSocket } from '../hooks/useBalanceWebSocket';
 
 const DashboardView: React.FC = () => {
-  const { 
-    accounts, 
-    loading: accountsLoading, 
-    error: accountsError, 
-    refreshAccounts,
-    syncAccount 
-  } = useExchangeAccounts();
+  const authToken = localStorage.getItem('authToken') || '';
   
+  // Real-time balances via WebSocket
+  const { balances: wsBalances, connected: wsConnected, error: wsError, refreshBalances: wsRefresh } = useBalanceWebSocket(authToken);
+
+  // Fallback API balances
   const { 
-    portfolio, 
-    loading: portfolioLoading 
-  } = usePortfolioSummary();
+    data: balanceData, 
+    loading: balancesLoading, 
+    error: balancesError, 
+    refetch: refreshBalances 
+  } = useFetchBalances({
+    authToken,
+    autoFetch: true,
+    refreshInterval: 30000
+  });
+  
+  const [exchangeConnectionStatus, setExchangeConnectionStatus] = useState<ConnectionStatusState | null>(null);
+  const [eventLogs, setEventLogs] = useState<Array<{
+    timestamp: string;
+    message: string;
+    type: 'info' | 'warning' | 'error' | 'success';
+  }>>([]);
+
+  // Use WebSocket balances if available, otherwise fallback to API data
+  const liveBalances = wsBalances && wsBalances.length > 0 ? wsBalances : balanceData;
+
+  // Group balances by exchange and wallet type, ensuring all 6 cards are shown
+  const groupedBalances = React.useMemo(() => {
+    const exchanges = ['Binance', 'KuCoin'];
+    const walletTypes = ['Spot', 'Future', 'Funding'];
+    const grouped: { [key: string]: any } = {};
+    
+    // Initialize all 6 cards first
+    exchanges.forEach(exchange => {
+      walletTypes.forEach(walletType => {
+        const key = `${exchange}-${walletType}`;
+        grouped[key] = {
+          exchange,
+          walletType,
+          balances: [],
+          totalValue: 0
+        };
+      });
+    });
+    
+    // Fill with real data if available
+    if (liveBalances && liveBalances.length > 0) {
+      liveBalances.forEach(balance => {
+        const key = `${balance.exchangeName}-${balance.walletType}`;
+        if (grouped[key]) {
+          grouped[key].balances.push(balance);
+          grouped[key].totalValue += (Number(balance.value) || 0);
+        }
+      });
+    }
+    
+    return grouped;
+  }, [liveBalances]);
+
+  // Calculate total portfolio value
+  const totalPortfolioValue = React.useMemo(() => {
+    if (!balanceData || balanceData.length === 0) return 0;
+    return balanceData.reduce((total, balance) => total + (Number(balance.value) || 0), 0);
+  }, [balanceData]);
+
+  useEffect(() => {
+    // Subscribe to connection status updates
+    const unsubscribe = connectionStatusService.subscribe((status) => {
+      setExchangeConnectionStatus(status);
+      
+      // Add event logs for connection status changes
+      const timestamp = new Date().toLocaleTimeString();
+      const newLogs: typeof eventLogs = [];
+      
+      if (status.binance.status === 'connected') {
+        newLogs.push({
+          timestamp,
+          message: `Binance API connected (${status.binance.latency}ms)`,
+          type: 'success'
+        });
+      } else if (status.binance.status === 'error') {
+        newLogs.push({
+          timestamp,
+          message: `Binance API connection failed: ${status.binance.message}`,
+          type: 'error'
+        });
+      }
+      
+      if (status.kucoin.status === 'connected') {
+        newLogs.push({
+          timestamp,
+          message: `KuCoin API connected (${status.kucoin.latency}ms)`,
+          type: 'success'
+        });
+      } else if (status.kucoin.status === 'error') {
+        newLogs.push({
+          timestamp,
+          message: `KuCoin API connection failed: ${status.kucoin.message}`,
+          type: 'error'
+        });
+      }
+      
+      if (newLogs.length > 0) {
+        setEventLogs(prevLogs => [...newLogs, ...prevLogs].slice(0, 10)); // Keep only last 10 logs
+      }
+    });
+
+    // Initial event log
+    setEventLogs([
+      {
+        timestamp: new Date().toLocaleTimeString(),
+        message: 'Dashboard initialized',
+        type: 'info'
+      },
+      {
+        timestamp: new Date(Date.now() - 5000).toLocaleTimeString(),
+        message: 'Starting exchange connection monitoring',
+        type: 'info'
+      }
+    ]);
+
+    return () => unsubscribe();
+  }, []);
   
   const { 
     isConnected, 
     connectionStatus 
   } = useConnectionStatus();
-
-  // Event logs (this could be enhanced with real backend events)
-  const eventLogs = [
-    {
-      timestamp: new Date().toLocaleTimeString(),
-      message: '[INFO] Dashboard rendered.',
-      type: 'info'
-    },
-    {
-      timestamp: new Date(Date.now() - 30000).toLocaleTimeString(),
-      message: `[INFO] Connected to ${accounts.length} exchange accounts.`,
-      type: 'info'
-    }
-  ];
 
   return (
     <Box sx={{ p: 3 }}>
@@ -75,11 +173,9 @@ const DashboardView: React.FC = () => {
           <Typography variant="h4" sx={{ color: 'text.primary', fontWeight: 600 }}>
             Dashboard
           </Typography>
-          {portfolio && (
-            <Typography variant="body1" sx={{ color: 'text.secondary', mt: 1 }}>
-              Total Portfolio Value: ${portfolio.total_value_usd.toLocaleString()}
-            </Typography>
-          )}
+          <Typography variant="body1" sx={{ color: 'text.secondary', mt: 1 }}>
+            Total Portfolio Value: ${totalPortfolioValue.toLocaleString()}
+          </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Chip 
@@ -116,17 +212,20 @@ const DashboardView: React.FC = () => {
         </Box>
       </Box>
 
+      {/* Connection Status */}
+      <ConnectionStatusComponent />
+
       {/* Loading State */}
-      {accountsLoading && (
+      {balancesLoading && (
         <Grid container spacing={3} sx={{ mb: 4 }}>
-          {[1, 2, 3].map((i) => (
+          {[1, 2, 3, 4].map((i) => (
             <Grid item xs={12} md={6} lg={4} key={i}>
-              <Card sx={{ height: '300px' }}>
+              <Card sx={{ height: '350px' }}>
                 <CardContent sx={{ p: 3 }}>
                   <Skeleton variant="text" width="60%" height={32} />
                   <Skeleton variant="rectangular" width={80} height={24} sx={{ mt: 1 }} />
                   <Skeleton variant="text" width="40%" height={48} sx={{ mt: 2 }} />
-                  <Skeleton variant="rectangular" width="100%" height={100} sx={{ mt: 2 }} />
+                  <Skeleton variant="rectangular" width="100%" height={150} sx={{ mt: 2 }} />
                 </CardContent>
               </Card>
             </Grid>
@@ -135,177 +234,176 @@ const DashboardView: React.FC = () => {
       )}
 
       {/* Error State */}
-      {accountsError && (
+      {balancesError && (
         <Alert 
           severity="error" 
           sx={{ mb: 4 }}
           action={
-            <Button color="inherit" size="small" onClick={refreshAccounts}>
+            <Button color="inherit" size="small" onClick={refreshBalances}>
               Retry
             </Button>
           }
         >
-          Failed to load exchange accounts: {accountsError}
+          Failed to load balances: {balancesError}
         </Alert>
       )}
 
-      {/* Exchange Account Cards */}
-      {!accountsLoading && !accountsError && (
+      {/* Exchange Account Cards - Always show all 6 cards */}
+      {!balancesLoading && (
         <Grid container spacing={3} sx={{ mb: 4 }}>
-          {accounts.length === 0 ? (
-            <Grid item xs={12}>
-              <Card>
-                <CardContent sx={{ p: 4, textAlign: 'center' }}>
-                  <Typography variant="h6" sx={{ color: 'text.secondary', mb: 2 }}>
-                    No Exchange Accounts Found
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
-                    Connect your exchange accounts to start trading
-                  </Typography>
-                  <Button variant="contained" sx={{ bgcolor: 'success.main', color: 'black' }}>
-                    Add Exchange Account
-                  </Button>
-                </CardContent>
-              </Card>
-            </Grid>
-          ) : (
-            accounts.map((account) => (
-              <Grid item xs={12} md={6} lg={4} key={account.id}>
-                <Card sx={{ height: '100%' }}>
-                  <CardContent sx={{ p: 3 }}>
-                    {/* Card Header */}
-                    <Box sx={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      alignItems: 'flex-start',
-                      mb: 2 
-                    }}>
-                      <Box>
-                        <Typography variant="h6" sx={{ 
-                          color: 'text.primary', 
-                          fontWeight: 600,
-                          fontSize: '1rem',
-                          mb: 0.5
-                        }}>
-                          {account.name}
-                        </Typography>
-                        <Chip 
-                          label={account.status}
-                          size="small"
-                          sx={{
-                            bgcolor: account.status === 'active' ? 'success.main' : 'warning.main',
-                            color: 'black',
-                            fontWeight: 600,
-                            fontSize: '0.75rem'
-                          }}
-                        />
-                      </Box>
-                      <IconButton 
-                        size="small" 
-                        sx={{ color: 'text.secondary' }}
-                        onClick={() => syncAccount(account.id)}
-                      >
-                        <Sync fontSize="small" />
-                      </IconButton>
-                    </Box>
-
-                    {/* Total Value */}
-                    <Box sx={{ mb: 3 }}>
-                      <Typography variant="h4" sx={{ 
-                        color: 'text.primary',
-                        fontWeight: 700,
-                        fontSize: '2rem',
-                        mb: 0.5
+          {Object.entries(groupedBalances).map(([key, account]) => (
+            <Grid item xs={12} md={6} lg={4} key={key}>
+              <Card sx={{ 
+                height: '100%',
+                bgcolor: '#1e293b', // Dark blue-gray background
+                border: '1px solid #334155',
+                borderRadius: 2,
+                minHeight: '280px'
+              }}>
+                <CardContent sx={{ p: 3 }}>
+                  {/* Card Header */}
+                  <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'flex-start',
+                    mb: 3
+                  }}>
+                    <Box>
+                      <Typography variant="h6" sx={{ 
+                        color: '#ffffff', 
+                        fontWeight: 500,
+                        fontSize: '1.25rem',
+                        mb: 1
                       }}>
-                        ${account.total_value_usd.toFixed(2)}
-                      </Typography>
-                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        Total Value
+                        {account.exchange} - {account.walletType}
                       </Typography>
                     </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ 
+                        width: 8, 
+                        height: 8, 
+                        bgcolor: '#22c55e', // Green dot
+                        borderRadius: '50%' 
+                      }} />
+                      <Typography variant="body2" sx={{ 
+                        color: '#22c55e',
+                        fontSize: '0.875rem',
+                        fontWeight: 500
+                      }}>
+                        Active
+                      </Typography>
+                    </Box>
+                  </Box>
 
-                    {/* Assets Table */}
+                  {/* Total Value */}
+                  <Box sx={{ mb: 4 }}>
+                    <Typography variant="h3" sx={{ 
+                      color: '#ffffff',
+                      fontWeight: 700,
+                      fontSize: '3rem',
+                      lineHeight: 1,
+                      mb: 1
+                    }}>
+                      ${account.totalValue.toFixed(2)}
+                    </Typography>
+                    <Typography variant="body2" sx={{ 
+                      color: '#64748b',
+                      fontSize: '1rem'
+                    }}>
+                      Total Value
+                    </Typography>
+                  </Box>
+
+                  {/* Assets Table Header */}
+                  <Box sx={{ mb: 2 }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" sx={{ 
+                          color: '#64748b', 
+                          fontWeight: 500,
+                          fontSize: '0.875rem'
+                        }}>
+                          Asset
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" sx={{ 
+                          color: '#64748b', 
+                          fontWeight: 500,
+                          fontSize: '0.875rem',
+                          textAlign: 'center'
+                        }}>
+                          Total
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" sx={{ 
+                          color: '#64748b', 
+                          fontWeight: 500,
+                          fontSize: '0.875rem',
+                          textAlign: 'right'
+                        }}>
+                          Value (USD)
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Box>
+
+                  {/* Assets List */}
+                  <Box>
                     {account.balances.length > 0 ? (
-                      <TableContainer>
-                        <Table size="small">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell sx={{ 
-                                color: 'text.secondary', 
+                      account.balances
+                        .filter((balance: any) => balance.total > 0)
+                        .map((balance: any, index: number) => (
+                        <Box key={index} sx={{ mb: 1.5 }}>
+                          <Grid container spacing={2} alignItems="center">
+                            <Grid item xs={4}>
+                              <Typography sx={{ 
+                                color: '#ffffff',
                                 fontWeight: 600,
-                                fontSize: '0.75rem',
-                                border: 'none',
-                                pb: 1
+                                fontSize: '1rem'
                               }}>
-                                Asset
-                              </TableCell>
-                              <TableCell align="right" sx={{ 
-                                color: 'text.secondary', 
+                                {balance.symbol}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={4}>
+                              <Typography sx={{ 
+                                color: '#ffffff',
+                                fontSize: '1rem',
+                                textAlign: 'center'
+                              }}>
+                                {balance.total.toFixed(5)}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={4}>
+                              <Typography sx={{ 
+                                color: '#22c55e',
                                 fontWeight: 600,
-                                fontSize: '0.75rem',
-                                border: 'none',
-                                pb: 1
+                                fontSize: '1rem',
+                                textAlign: 'right'
                               }}>
-                                Total
-                              </TableCell>
-                              <TableCell align="right" sx={{ 
-                                color: 'text.secondary', 
-                                fontWeight: 600,
-                                fontSize: '0.75rem',
-                                border: 'none',
-                                pb: 1
-                              }}>
-                                Value (USD)
-                              </TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {account.balances.filter(balance => balance.total > 0).map((balance, index) => (
-                              <TableRow key={index}>
-                                <TableCell sx={{ 
-                                  color: 'text.primary',
-                                  fontWeight: 600,
-                                  border: 'none',
-                                  py: 1
-                                }}>
-                                  {balance.asset}
-                                </TableCell>
-                                <TableCell align="right" sx={{ 
-                                  color: 'text.primary',
-                                  border: 'none',
-                                  py: 1
-                                }}>
-                                  {balance.total.toFixed(5)}
-                                </TableCell>
-                                <TableCell align="right" sx={{ 
-                                  color: 'success.main',
-                                  fontWeight: 600,
-                                  border: 'none',
-                                  py: 1
-                                }}>
-                                  ${balance.value_usd.toFixed(2)}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
+                                ${(Number(balance.value) || 0).toFixed(2)}
+                              </Typography>
+                            </Grid>
+                          </Grid>
+                        </Box>
+                      ))
                     ) : (
                       <Box sx={{ 
                         textAlign: 'center', 
-                        py: 2,
-                        color: 'text.secondary'
+                        py: 3,
+                        color: '#64748b'
                       }}>
-                        <Typography variant="body2">
-                          No assets found.
+                        <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
+                          No assets found
                         </Typography>
                       </Box>
                     )}
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))
-          )}
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
         </Grid>
       )}
 
@@ -334,23 +432,60 @@ const DashboardView: React.FC = () => {
             border: '1px solid #2D3748',
             borderRadius: 1,
             p: 2,
-            fontFamily: 'monospace'
+            fontFamily: 'monospace',
+            maxHeight: '300px',
+            overflowY: 'auto'
           }}>
-            {eventLogs.map((log, index) => (
+            {eventLogs.length === 0 ? (
               <Typography
-                key={index}
                 variant="body2"
                 sx={{
-                  color: log.type === 'info' ? '#6B73FF' : 'text.primary',
+                  color: '#8B949E',
                   fontSize: '0.8rem',
-                  lineHeight: 1.5
+                  fontStyle: 'italic'
                 }}
               >
-                <span style={{ color: '#8B949E' }}>{log.timestamp}</span>{' '}
-                <span style={{ color: '#6B73FF' }}>[INFO]</span>
-                <span style={{ color: '#FFFFFF' }}>Dashboard rendered.</span>
+                No events yet...
               </Typography>
-            ))}
+            ) : (
+              eventLogs.map((log, index) => {
+                const getLogColor = (type: string) => {
+                  switch (type) {
+                    case 'success': return '#26DE81';
+                    case 'error': return '#FF6B6B';
+                    case 'warning': return '#FFD93D';
+                    case 'info': 
+                    default: return '#6B73FF';
+                  }
+                };
+
+                const getLogPrefix = (type: string) => {
+                  switch (type) {
+                    case 'success': return '[SUCCESS]';
+                    case 'error': return '[ERROR]';
+                    case 'warning': return '[WARNING]';
+                    case 'info':
+                    default: return '[INFO]';
+                  }
+                };
+
+                return (
+                  <Typography
+                    key={index}
+                    variant="body2"
+                    sx={{
+                      fontSize: '0.8rem',
+                      lineHeight: 1.5,
+                      mb: 0.5
+                    }}
+                  >
+                    <span style={{ color: '#8B949E' }}>{log.timestamp}</span>{' '}
+                    <span style={{ color: getLogColor(log.type) }}>{getLogPrefix(log.type)}</span>{' '}
+                    <span style={{ color: '#FFFFFF' }}>{log.message.replace(/^\[.*?\]\s*/, '')}</span>
+                  </Typography>
+                );
+              })
+            )}
           </Box>
         </CardContent>
       </Card>

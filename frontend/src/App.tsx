@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { 
   CssBaseline, 
@@ -13,6 +13,7 @@ import {
   ListItemText,
   Typography,
   IconButton,
+  Button,
   useMediaQuery,
   useTheme
 } from '@mui/material';
@@ -35,6 +36,7 @@ import PortfolioView from './views/PortfolioView';
 import TradingChartsView from './views/TradingChartsView';
 import CryptoHeatmapView from './views/CryptoHeatmapView';
 import LoginPage from './views/LoginPage';
+import { environment } from './config/environment';
 
 // Create dark theme matching the attached image
 const darkTheme = createTheme({
@@ -178,7 +180,6 @@ const navigationItems = [
   { text: 'Trade History', icon: <TradeHistoryIcon />, id: 'history' },
   { text: 'Strategy Generator', icon: <StrategyGeneratorIcon />, id: 'strategy' },
   { text: 'Settings', icon: <SettingsIcon />, id: 'settings' },
-  { text: 'Login', icon: <SettingsIcon />, id: 'login' }, // Add login nav
 ];
 
 const App: React.FC = () => {
@@ -186,6 +187,45 @@ const App: React.FC = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [selectedView, setSelectedView] = useState('dashboard');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Check authentication status on component mount
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      // Verify token is still valid by making a test API call
+      fetch('/api/health/', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      .then(response => {
+        if (response.ok) {
+          setIsAuthenticated(true);
+        } else {
+          // Token is invalid, remove it
+          localStorage.removeItem('authToken');
+          setIsAuthenticated(false);
+        }
+      })
+      .catch(() => {
+        // Network error or API not available, remove token
+        localStorage.removeItem('authToken');
+        setIsAuthenticated(false);
+      });
+    }
+  }, []);
+
+  // If not authenticated, show only login page
+  if (!isAuthenticated) {
+    return (
+      <ThemeProvider theme={darkTheme}>
+        <CssBaseline />
+        <LoginPage onLoginSuccess={() => setIsAuthenticated(true)} />
+      </ThemeProvider>
+    );
+  }
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -208,11 +248,14 @@ const App: React.FC = () => {
         return <TradingChartsView />;
       case 'heatmap':
         return <CryptoHeatmapView />;
-      case 'login':
-        return <LoginPage />;
       default:
         return <DashboardView />;
     }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    setIsAuthenticated(false);
   };
 
   const drawer = (
@@ -270,6 +313,15 @@ const App: React.FC = () => {
 
       {/* Version info */}
       <Box sx={{ p: 2, borderTop: '1px solid #2D3748' }}>
+        <Button
+          variant="outlined"
+          color="error"
+          fullWidth
+          onClick={handleLogout}
+          sx={{ mb: 2 }}
+        >
+          Logout
+        </Button>
         <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
           Version 3.10 | Full App
         </Typography>

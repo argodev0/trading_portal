@@ -1,0 +1,33 @@
+{
+    "dotnet.completion.showCompletionItemsFromUnimportedNamespaces": false,
+    "dotnet.inlayHints.enableInlayHintsForParameters": false,
+    "dotnet.inlayHints.enableInlayHintsForLiteralParameters": false,
+    "dotnet.inlayHints.enableInlayHintsForIndexerParameters": false,
+    "dotnet.inlayHints.enableInlayHintsForObjectCreationParameters": false,
+    "dotnet.inlayHints.enableInlayHintsForOtherParameters": false,
+    "dotnet.inlayHints.enableInlayHintsForTypes": false,
+    "dotnet.inlayHints.enableInlayHintsForImplicitVariableTypes": false,
+    "dotnet.inlayHints.enableInlayHintsForLambdaParameterTypes": false,
+    "dotnet.inlayHints.enableInlayHintsForImplicitObjectCreation": false,
+    "csharp.debug.enable": false,
+    "csharp.semanticHighlighting.enabled": false,
+    "omnisharp.enableEditorConfigSupport": false,
+    "omnisharp.enableImportCompletion": false,
+    "omnisharp.enableRoslynAnalyzers": false,
+    "files.associations": {
+        "*.py": "python",
+        "*.js": "javascript",
+        "*.ts": "typescript",
+        "*.tsx": "typescriptreact",
+        "*.jsx": "javascriptreact",
+        "*.json": "json",
+        "*.html": "html",
+        "*.css": "css",
+        "*.md": "markdown"
+    },
+    "python.defaultInterpreterPath": "/root/.venv/bin/python",
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "typescript.preferences.includePackageJsonAutoImports": "auto",
+    "javascript.preferences.includePackageJsonAutoImports": "auto"
+}

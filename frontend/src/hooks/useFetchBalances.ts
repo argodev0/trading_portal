@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios, { AxiosResponse, AxiosError } from 'axios';
+import { environment } from '../config/environment';
 
 // Type definitions for the hook
 interface BalanceData {
@@ -39,7 +40,7 @@ interface UseFetchBalancesOptions {
 const useFetchBalances = (options: UseFetchBalancesOptions = {}): UseFetchBalancesState => {
   const {
     authToken,
-    baseURL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000',
+    baseURL = environment.apiBaseUrl || '',  // Use environment config or relative URLs
     autoFetch = true,
     refreshInterval
   } = options;
@@ -77,21 +78,13 @@ const useFetchBalances = (options: UseFetchBalancesOptions = {}): UseFetchBalanc
 
   // Main fetch function
   const fetchBalances = useCallback(async () => {
-    const token = getAuthToken();
-    
-    if (!token) {
-      setError('No authentication token found. Please login.');
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
     try {
       const axiosInstance = createAxiosInstance();
       
-      const response: AxiosResponse<FetchBalancesResponse> = await axiosInstance.get('/api/accounts/balances');
+      const response: AxiosResponse<FetchBalancesResponse> = await axiosInstance.get('/api/exchanges/balances/');
       
       if (response.data.success) {
         setData(response.data.data || []);
